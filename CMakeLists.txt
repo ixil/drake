@@ -30,6 +30,7 @@ if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL x86_64)
   )
 endif()
 
+set(SUPPORTED_SYSTEM)
 set(UNIX_DISTRIBUTION_ID)
 set(UNIX_DISTRIBUTION_CODENAME)
 
@@ -38,54 +39,64 @@ if(APPLE)
     message(FATAL_ERROR
       "Darwin ${CMAKE_SYSTEM_VERSION} is NOT supported. Please use Darwin "
       "Darwin 19.x (macOS Catalina) or 20.x (macOS Big Sur)."
-    )
+      )
   endif()
+  set(SUPPORTED_SYSTEM TRUE)
 else()
   find_program(LSB_RELEASE_EXECUTABLE NAMES lsb_release)
 
   if(NOT LSB_RELEASE_EXECUTABLE)
-    message(FATAL_ERROR "Could NOT find the lsb_release executable")
-  endif()
+    message(WARNING
+      "Could NOT find the lsb_release executable.\n
+      This is an UNSUPPORTED configuration.\n
+      Good luck..."
+      )
+    set(SUPPORTED_SYSTEM FALSE)
 
-  mark_as_advanced(LSB_RELEASE_EXECUTABLE)
+    # mark_as_advanced(LSB_RELEASE_EXECUTABLE) # TODO
+  else()
 
-  execute_process(COMMAND "${LSB_RELEASE_EXECUTABLE}" --id --short
-    RESULT_VARIABLE LSB_RELEASE_ID_SHORT_RESULT_VARIABLE
-    OUTPUT_VARIABLE LSB_RELEASE_ID_SHORT_OUTPUT_VARIABLE
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
+    mark_as_advanced(LSB_RELEASE_EXECUTABLE)
 
-  if(LSB_RELEASE_ID_SHORT_RESULT_VARIABLE EQUAL 0)
-    set(UNIX_DISTRIBUTION_ID "${LSB_RELEASE_ID_SHORT_OUTPUT_VARIABLE}")
-  endif()
-
-  if(NOT UNIX_DISTRIBUTION_ID STREQUAL Ubuntu)
-    message(FATAL_ERROR
-      "Distribution ${UNIX_DISTRIBUTION_ID} is NOT supported"
+    execute_process(COMMAND "${LSB_RELEASE_EXECUTABLE}" --id --short
+      RESULT_VARIABLE LSB_RELEASE_ID_SHORT_RESULT_VARIABLE
+      OUTPUT_VARIABLE LSB_RELEASE_ID_SHORT_OUTPUT_VARIABLE
+      OUTPUT_STRIP_TRAILING_WHITESPACE
     )
-  endif()
 
-  string(TOLOWER "${UNIX_DISTRIBUTION_ID}" UNIX_DISTRIBUTION_ID)
+    if(LSB_RELEASE_ID_SHORT_RESULT_VARIABLE EQUAL 0)
+      set(UNIX_DISTRIBUTION_ID "${LSB_RELEASE_ID_SHORT_OUTPUT_VARIABLE}")
+    endif()
 
-  execute_process(COMMAND "${LSB_RELEASE_EXECUTABLE}" --codename --short
-    RESULT_VARIABLE LSB_RELEASE_CODENAME_SHORT_RESULT_VARIABLE
-    OUTPUT_VARIABLE LSB_RELEASE_CODENAME_SHORT_OUTPUT_VARIABLE
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
+    if(NOT UNIX_DISTRIBUTION_ID STREQUAL Ubuntu)
+      message(FATAL_ERROR
+        "Distribution ${UNIX_DISTRIBUTION_ID} is NOT supported"
+      )
+    endif()
 
-  if(LSB_RELEASE_CODENAME_SHORT_RESULT_VARIABLE EQUAL 0)
-    set(UNIX_DISTRIBUTION_CODENAME
-      "${LSB_RELEASE_CODENAME_SHORT_OUTPUT_VARIABLE}"
+    string(TOLOWER "${UNIX_DISTRIBUTION_ID}" UNIX_DISTRIBUTION_ID)
+
+    execute_process(COMMAND "${LSB_RELEASE_EXECUTABLE}" --codename --short
+      RESULT_VARIABLE LSB_RELEASE_CODENAME_SHORT_RESULT_VARIABLE
+      OUTPUT_VARIABLE LSB_RELEASE_CODENAME_SHORT_OUTPUT_VARIABLE
+      OUTPUT_STRIP_TRAILING_WHITESPACE
     )
-  endif()
 
-  # The supported releases should match those listed in both doc/developers.rst
-  # and tools/workspace/os.bzl.
-  if(NOT UNIX_DISTRIBUTION_CODENAME MATCHES "^(bionic|focal)$")
-    message(FATAL_ERROR
-      "Release ${UNIX_DISTRIBUTION_CODENAME} is NOT supported. Please use "
-      "Ubuntu 18.04 (Bionic) or 20.04 (Focal)."
-    )
+    if(LSB_RELEASE_CODENAME_SHORT_RESULT_VARIABLE EQUAL 0)
+      set(UNIX_DISTRIBUTION_CODENAME
+        "${LSB_RELEASE_CODENAME_SHORT_OUTPUT_VARIABLE}"
+      )
+    endif()
+
+    # The supported releases should match those listed in both doc/developers.rst
+    # and tools/workspace/os.bzl.
+    if(NOT UNIX_DISTRIBUTION_CODENAME MATCHES "^(bionic|focal)$")
+      message(FATAL_ERROR
+        "Release ${UNIX_DISTRIBUTION_CODENAME} is NOT supported. Please use "
+        "Ubuntu 18.04 (Bionic) or 20.04 (Focal)."
+      )
+    endif()
+    set(SUPPORTED_SYSTEM TRUE)
   endif()
 endif()
 
@@ -101,8 +112,11 @@ get_filename_component(CXX_COMPILER_REALPATH "${CMAKE_CXX_COMPILER}" REALPATH)
 get_filename_component(CXX_COMPILER_NAME "${CXX_COMPILER_REALPATH}" NAME)
 
 if(C_COMPILER_NAME STREQUAL ccache OR CXX_COMPILER_NAME STREQUAL ccache)
-  message(FATAL_ERROR
-    "Compilation with ccache is NOT supported due to incompatibility with Bazel"
+  message(WARNING
+    "Compilation with ccache is NOT supported due to incompatibility with Bazel.\n
+    Setting Bazel to build a non-reproducible may work.\n
+     consider: --spawn_strategy=standalone --sandbox_writable_path=/home/user/.ccache
+    "
   )
 endif()
 
@@ -156,6 +170,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     )
   endif()
 else()
+
   # Check flag added in tools/cc_toolchain/bazel.rc is supported.
   include(CheckCXXCompilerFlag)
   set(FLAG_STD_CXX17 -std=c++17)
@@ -226,32 +241,45 @@ if(CMAKE_VERSION VERSION_LESS 3.12)
     "${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR}"
   )
 else()
-  if(PYTHON_EXECUTABLE)
-    set(Python_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH
-      "Path to the python3 executable" FORCE
-    )
+  if(DEFINED $ENV{PYTHON_BIN_PATH})
+    set(Python_EXECUTABLE $ENV{PYTHON_BIN_PATH} CACHE FILEPATH
+      "Path to the python executable" FORCE
+      )
     unset(PYTHON_EXECUTABLE CACHE)
+  else()
+    if(PYTHON_EXECUTABLE)
+      set(Python_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH
+        "Path to the python3 executable" FORCE
+      )
+      unset(PYTHON_EXECUTABLE CACHE)
+    endif()
+    find_program(Python_EXECUTABLE NAMES "${FIND_PROGRAM_PYTHON3_NAMES}")
   endif()
-  find_program(Python_EXECUTABLE NAMES "${FIND_PROGRAM_PYTHON3_NAMES}")
-  if(NOT Python_EXECUTABLE)
-    message(FATAL_ERROR "Could NOT find the python3 executable")
-  endif()
-  set(Python_FIND_STRATEGY LOCATION)
-  find_package(Python 3 EXACT MODULE REQUIRED
-    COMPONENTS Development Interpreter NumPy
-  )
-  if(NOT Python_INTERPRETER_ID STREQUAL Python)
-    message(WARNING
-      "Python interpreter ${Python_INTERPRETER_ID} is NOT supported. Python "
-      "code in project drake_cxx_python may fail at runtime."
+
+    if(NOT Python_EXECUTABLE)
+      message(FATAL_ERROR "Could NOT find the python3 executable")
+    endif()
+    set(Python_FIND_STRATEGY LOCATION)
+    find_package(Python 3 EXACT MODULE REQUIRED
+      COMPONENTS Development Interpreter NumPy
     )
-  endif()
-  set(PYTHON_VERSION_MAJOR_MINOR
-    "${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}"
-  )
+    if(NOT Python_INTERPRETER_ID STREQUAL Python)
+      message(WARNING
+        "Python interpreter ${Python_INTERPRETER_ID} is NOT supported. Python "
+        "code in project drake_cxx_python may fail at runtime."
+      )
+    endif()
+    set(PYTHON_VERSION_MAJOR_MINOR
+      "${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}"
+    )
 endif()
 
-if(NOT PYTHON_VERSION_MAJOR_MINOR VERSION_EQUAL SUPPORTED_PYTHON_VERSION)
+if(NOT SUPPORTED_SYSTEM)
+  message(WARNING
+    "Python version ${PYTHON_VERSION_MAJOR_MINOR} MAY NOT be supported. Python "
+    "code in project drake_cxx_python may fail at runtime."
+    )
+elseif(NOT PYTHON_VERSION_MAJOR_MINOR VERSION_EQUAL SUPPORTED_PYTHON_VERSION)
   message(WARNING
     "Python version ${PYTHON_VERSION_MAJOR_MINOR} is NOT supported. Python "
     "code in project drake_cxx_python may fail at runtime."
@@ -550,8 +578,31 @@ set(CPACK_PACKAGE_CHECKSUM SHA256)
 set(CPACK_SET_DESTDIR ON)
 set(CPACK_SOURCE_GENERATOR "")
 
-if(APPLE)
+if(NOT SUPPORTED_SYSTEM)
+  message(WARNING, "You're going to have to work out how to package this ourself! Goodluck!")
+elseif(APPLE)
   set(CPACK_SYSTEM_NAME mac)
+else()
+  string(TOLOWER "${CMAKE_SYSTEM_NAME}" CPACK_SYSTEM_NAME)
+
+  list(APPEND CPACK_GENERATOR DEB)
+
+  set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+  set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON)
+  set(CPACK_DEBIAN_PACKAGE_HOMEPAGE https://drake.mit.edu/)
+  set(CPACK_DEBIAN_PACKAGE_RELEASE 1)
+  set(CPACK_DEBIAN_PACKAGE_SECTION contrib/devel)
+
+  file(STRINGS
+    "setup/${UNIX_DISTRIBUTION_ID}/binary_distribution/packages-${UNIX_DISTRIBUTION_CODENAME}.txt"
+    CPACK_DEBIAN_PACKAGE_DEPENDS
+    )
+  string(REGEX REPLACE "([a-z0-9\\-]+)=([a-z0-9\\-\\.~]+)" "\\1 (= \\2)"
+    CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}"
+    )
+  string(REPLACE ";" ", " CPACK_DEBIAN_PACKAGE_DEPENDS
+    "${CPACK_DEBIAN_PACKAGE_DEPENDS}"
+    )
 else()
   string(TOLOWER "${CMAKE_SYSTEM_NAME}" CPACK_SYSTEM_NAME)
 
@@ -575,8 +626,10 @@ else()
   )
 endif()
 
-set(CPACK_PACKAGE_FILE_NAME
-  "${PROJECT_NAME}-${BUILD_TIMESTAMP}-${CPACK_SYSTEM_NAME}"
-)
+if(SUPPORTED_SYSTEM)
+  set(CPACK_PACKAGE_FILE_NAME
+    "${PROJECT_NAME}-${BUILD_TIMESTAMP}-${CPACK_SYSTEM_NAME}"
+  )
 
-include(CPack)
+  include(CPack)
+endif()
