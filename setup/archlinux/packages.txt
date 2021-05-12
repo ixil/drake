@@ -1,0 +1,64 @@
+# TODO convert from ubuntu naming
+coin-or-clp
+coin-or-coinutils
+coin-or-ipopt
+jre-openjdk
+jupyter-notebook
+suitesparse
+blas
+bzip2
+double-conversion
+expat
+libfreetype2
+gcc-libs
+eigen
+gflags
+libglew
+glib2
+libglvnd
+libjpeg-turbo
+hdf5
+jsoncpp
+lapack
+lz4
+xz
+mumps-seq
+libnetcdf
+nlopt
+libogg
+libglvnd
+> libopengl0
+libpng
+qt5-base
+    > libqt5core5a
+    > libqt5gui5
+    > libqt5printsupport5
+    > libqt5widgets5
+
+spdlog
+sqlite
+libtheora
+libtiff5
+libtinyxml2
+tinyxml
+libx11
+libxml2
+libxt
+yaml-cpp
+ocl-icd
+python
+python-ipywidgets
+python-lxml
+python-matplotlib
+python-numpy
+python-pydot
+python-pygame
+python-scipy
+python-tornado
+python-u-msgpack
+python-yaml
+python-pyzmq
+zlib
+
+# not present / VTK
+python-tk
