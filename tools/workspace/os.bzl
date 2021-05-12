@@ -49,6 +49,8 @@ def _make_result(
         distribution = "ubuntu"
     elif macos_release != None:
         distribution = "macos"
+    elif unsupported_release != None:
+        distribution = "unsupportedlinuxOS"
     else:
         distribution = None
     return struct(
@@ -73,6 +75,7 @@ def _determine_linux(repository_ctx):
         r"/^\(NAME\|VERSION_ID\)=/{s/[^=]*=//;s/\"//g;p}",
         "/etc/os-release",
     ])
+
     if sed.error != None:
         return _make_result(error = error_prologue + sed.error)
 
@@ -89,6 +92,7 @@ def _determine_linux(repository_ctx):
     # Nothing matched.
     return _make_result(
         error = error_prologue + "unsupported distribution '%s'" % distro,
+        unsupported_release = distro
     )
 
 def _determine_macos(repository_ctx):
@@ -131,7 +135,7 @@ def determine_os(repository_ctx):
     Result:
         a struct, with attributes:
         - error: str iff any error occurred, else None
-        - distribution: str either "ubuntu" or "macos" if no error
+        - distribution: str either "ubuntu" or "macos" if no error, or "unsupportedlinuxOS"
         - is_macos: True iff on a supported macOS release, else False
         - macos_release: str like "10.15" or "11" iff on a supported macOS,
                          else None
@@ -209,6 +213,7 @@ package(default_visibility = ["//visibility:public"])
         executable = False,
     )
 
+# TODO ?
 def _os_specific_alias_impl(repository_ctx):
     os_specific_alias(repository_ctx, repository_ctx.attr.mapping)
 
